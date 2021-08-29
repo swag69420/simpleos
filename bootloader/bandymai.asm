@@ -6,8 +6,8 @@ jmp START
 
 PrintDesc: 
  pusha
- mov cx,
- mov dx, 
+ mov cx, 0
+ mov dx, 0
  divide:
     mov bx, 10
     div bx
@@ -56,3 +56,112 @@ print_keyCode:
 ret
 
 clear_scr:
+    pusha
+    push es
+    mov ax, 0xB800
+    mov es, ax
+    mov si, 0
+    keepClearing:
+        mov byte [es:si], ' '
+        inc si
+        mov byte [es:si], 0
+        inc si
+        cmp si, 4000    ;80*25*2
+        jl keepClearing
+
+    pop es
+    popa
+ret
+
+print_vram:
+    pusha
+    push es
+        mov ax, 0xB800
+        mov es, ax
+
+        mov di, 0
+        print_vramLoop:
+            mov al, [si]
+            cmp al, 0
+            je print_vramEnd
+            mov byte [es:di], al
+            mov byte [es:di + 1], 3 ;white
+            add di, 2
+            inc si
+            jmp print_vramLoop
+
+    print_vramEnd:
+        pop es
+        popa
+ret
+
+print_bios:
+    pusha
+    print_loop:
+        lodsb
+        or al, al   ;is determined by zf
+        jz print_loopEnd
+        mov ah, 0x0E
+        int 0x10
+        jmp print_loop
+    
+    print_loopEnd:
+    popa
+ret
+
+read_2ndLoader:
+    pusha
+    mov ah, 2
+    mov al, 4
+    mov ch, 0
+    mov cl, 2
+    mov dh, 0
+    mov dl, 0
+    int 0x13
+    jnc read_2ndLoaderEnd
+
+    mov si, floppyErrorMsg
+    call print_bios
+
+    read_2ndLoaderEnd
+        popa
+ret
+
+START:
+    xor ax, ax
+    mov ds, ax
+    mov es, ax
+    mov ss, ax
+    mov sp, 0xAC00
+
+    mov si, startMsg
+    call print_bios
+    mov bx, 0xAD00
+    call read_2ndLoader
+
+    cli
+    mov si, 9
+    shl si, 2
+    mov [es:si], word keyboard_handler
+    mov [es:si + 2], cs
+    
+    mov si, 0x80
+    shl si, 2
+    mov [es:si], word kernel_handler
+    mov [es:si + 2], cs
+    sti
+
+    call 0x0000:0xAD00
+    hang:
+    jmp hang
+
+startMsg db 'ADOS 2011 :D', 13, 10, 0
+keyMsg db 'Key pressed', 13, 10, 0
+floppyErrorMsg db 'Error reading kernel from floppy!', 13, 10, 0
+welcomeMsg db 'Greetings C kernel!', 13, 10, 0
+
+times 510-($-$$) db 0
+db 0x55
+db 0xAA
+
+;times 1474560-($-$$) db 0 ;1.44 MB
